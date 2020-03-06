@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -9,7 +10,59 @@ namespace NetworkCommunicationsFramework
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
+            Console.WriteLine("Network Communications Framework");
+            Console.WriteLine("Copyright Dracon Interactive, 2020"); ;
+
+            Console.WriteLine(" ");
+
+            string lower = GetConstrainedInput("UDP or Sockets?", "Please enter 'udp' or 'sockets': ", new string[] { "udp", "sockets" });
+
+            if (lower == "udp")
+            {
+                Console.WriteLine("Starting UDP Listener on port 11000");
+                UDPListener.Start();
+                bool continueListening = true;
+                while (continueListening)
+                {
+                    string m = "'all' to print all received data, 'last' to print last packet and 'close' to close stream";
+                    lower = GetConstrainedInput(m, m, new string[] { "all", "last", "close" });
+                    if (lower == "all")
+                    {
+                        Console.Write(UDPListener.allData + "\n");
+                    } else if (lower == "last")
+                    {
+                        Console.Write(UDPListener.lastData + "\n");
+                    } else
+                    {
+                        Console.WriteLine("Closing Stream");
+                        UDPListener.Stop();
+                    }
+                }
+            } else
+            {
+                lower = GetConstrainedInput("Server or Client?", "Please enter 'server' or 'client': ", new string[] { "server", "client" });
+                if (lower == "server")
+                {
+                    Console.WriteLine("Server launched");
+                    SocketController.Execute(SocketController.ExecuteType.Server);
+                } else if (lower == "client")
+                {
+                    Console.WriteLine("Client launched");
+                    SocketController.Execute(SocketController.ExecuteType.Client);
+                }
+            }
+        }
+
+        static string GetConstrainedInput (string message, string errorMessage, string[] options)
+        {
+            Console.WriteLine(message);
+            string lower = Console.ReadLine().ToLower();
+            while (!options.Contains(lower))
+            {
+                Console.WriteLine(errorMessage);
+                lower = Console.ReadLine().ToLower();
+            }
+            return lower;
         }
     }
 
@@ -17,14 +70,26 @@ namespace NetworkCommunicationsFramework
     {
         private const int listenPort = 11000;
 
+        static bool listening;
+
+        public static string allData;
+        public static string lastData;
         public static void Start()
         {
             var t = new Thread(() => StartListener());
             t.Name = "Listener Thread";
             t.Priority = ThreadPriority.Normal;
             t.Start();
+            Console.WriteLine("Listener Thread Started");
             t.IsBackground = true;
+            listening = true;
         }
+
+        public static void Stop ()
+        {
+            listening = false;
+        }
+
         private static void StartListener()
         {
             UdpClient listener = new UdpClient(listenPort);
@@ -34,10 +99,17 @@ namespace NetworkCommunicationsFramework
             {
                 using (var progress = new ProgressBar())
                 {
-                    while (true)
+                    while (listening)
                     {
                         byte[] bytes = listener.Receive(ref groupEP);
                         string output = Encoding.ASCII.GetString(bytes, 0, bytes.Length);
+                        allData += output;
+                        lastData = output;
+                        if (lastData.Contains("<EOF>"))
+                        {
+                            listening = false;
+                            Console.WriteLine("End of file received from server. Closing stream");
+                        }
                     }
                 }
             }
@@ -49,6 +121,8 @@ namespace NetworkCommunicationsFramework
             {
                 listener.Close();
             }
+
+            listener.Close();
         }
     }
 
